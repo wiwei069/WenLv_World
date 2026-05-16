@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from typing import Optional
@@ -107,7 +108,7 @@ class TavilyService:
             return urls
 
         # 1. Main search - government & information domains
-        main_response = self.client.search(
+        main_response = await self._search(
             query=query,
             search_depth=settings.tavily_search_depth,
             max_results=max_results,
@@ -128,7 +129,7 @@ class TavilyService:
         ]
         for iq in industry_queries:
             try:
-                ir = self.client.search(
+                ir = await self._search(
                     query=iq,
                     search_depth="basic",
                     max_results=5,
@@ -145,7 +146,7 @@ class TavilyService:
         # 3. Official data service search (文化和旅游部数据服务)
         try:
             gov_query = f"site:mct.gov.cn {query} 景区 数据"
-            gov_r = self.client.search(
+            gov_r = await self._search(
                 query=gov_query,
                 search_depth="basic",
                 max_results=5,
@@ -161,7 +162,7 @@ class TavilyService:
         # 4. Social platforms search
         social_query = f"{query} 旅游 评价"
         try:
-            social_response = self.client.search(
+            social_response = await self._search(
                 query=social_query,
                 search_depth="basic",
                 max_results=5,
@@ -189,7 +190,7 @@ class TavilyService:
         ]
         for tq in travel_queries:
             try:
-                tr = self.client.search(
+                tr = await self._search(
                     query=tq,
                     search_depth="basic",
                     max_results=5,
@@ -208,7 +209,7 @@ class TavilyService:
         # 6. Academic / research search
         try:
             academic_query = f"{query} 文旅 研究 分析 报告"
-            ar = self.client.search(
+            ar = await self._search(
                 query=academic_query,
                 search_depth="basic",
                 max_results=3,
@@ -231,7 +232,7 @@ class TavilyService:
                 f"{query} 景区照片 风景 风光",
             ]
             for iq in image_queries:
-                img_resp = self.client.search(
+                img_resp = await self._search(
                     query=iq,
                     search_depth="basic",
                     max_results=4,
@@ -537,6 +538,10 @@ class TavilyService:
         if "weibo" in url:
             return "weibo"
         return "tavily"
+
+    async def _search(self, **kwargs) -> dict:
+        """Run synchronous TavilyClient.search in a thread to avoid blocking the event loop."""
+        return await asyncio.to_thread(self.client.search, **kwargs)
 
     def _mock_search(self, query: str) -> list[dict]:
         mock_data = {
