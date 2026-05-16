@@ -105,54 +105,38 @@ class TavilyService:
         return urls
 
     async def search_projects(self, query: str, max_results: int = None) -> tuple[list[dict], list[str]]:
-        """Search for cultural tourism projects with parallel async queries."""
+        """Search for cultural tourism projects using a single async-safe query."""
         if not self.is_available():
             return self._mock_search(query), []
 
         max_results = max_results or settings.tavily_max_results
-
-        async def _run(q: str, **overrides) -> tuple[list[dict], list[str]]:
-            try:
-                resp = await self._async_search(
-                    query=q,
-                    search_depth="basic",
-                    max_results=overrides.get("max_results", max_results),
-                    include_images=True,
-                    language="zh",
-                    timeout=overrides.get("timeout", 20.0),
-                )
-                results = []
-                for r in resp.get("results", []):
-                    results.append(self._format_result(r, self._classify_source(r.get("url", "")), "tavily"))
-                return results, self._collect_images(resp)
-            except Exception:
-                return [], []
-
-        # 3 parallel searches instead of 10+ sequential
-        searches = await asyncio.gather(
-            _run(query),                                           # 1. Main search
-            _run(f"{query} 运营 游客 收入", max_results=5),         # 2. Industry data
-            _run(f"{query} 门票 评价 攻略", max_results=5),         # 3. Travel/social
-        )
-
         all_results = []
         all_images = []
-        for results, images in searches:
-            all_results.extend(results)
-            all_images.extend(images)
 
-        # Deduplicate images while preserving order
-        seen = set()
-        deduped_images = []
-        for img in all_images:
-            if img not in seen:
-                seen.add(img)
-                deduped_images.append(img)
+        try:
+            resp = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.client.search,
+                    query=query,
+                    search_depth="basic",
+                    max_results=max_results,
+                    include_answer=False,
+                    include_raw_content=False,
+                    include_images=True,
+                    language="zh",
+                ),
+                timeout=25.0,
+            )
+            for r in resp.get("results", []):
+                all_results.append(self._format_result(r, self._classify_source(r.get("url", "")), "tavily"))
+            all_images.extend(self._collect_images(resp))
+        except Exception:
+            pass
 
         all_results = self._filter_relevant(all_results, query)
-        deduped_images = self._filter_images(deduped_images, query)
+        all_images = self._filter_images(all_images, query)
 
-        return all_results, deduped_images
+        return all_results, all_images[:20]
 
     def _filter_relevant(self, results: list[dict], query: str) -> list[dict]:
         """Strict filtering: only keep results directly about the specific project query.
