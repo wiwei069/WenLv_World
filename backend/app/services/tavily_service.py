@@ -84,45 +84,7 @@ class TavilyService:
 
     async def search_projects(self, query: str, max_results: int = None) -> tuple[list[dict], list[str]]:
         """Search for cultural tourism projects."""
-        if not self.is_available():
-            return self._mock_search(query), []
-
-        max_results = max_results or settings.tavily_max_results
-        all_results = []
-        all_images: list[str] = []
-
-        def _collect_images(response: dict) -> list[str]:
-            imgs = response.get("images", [])
-            urls = []
-            if imgs and isinstance(imgs, list):
-                for img in imgs:
-                    if isinstance(img, str):
-                        if img.startswith("http"):
-                            urls.append(img)
-                    elif isinstance(img, dict):
-                        url = img.get("url") or img.get("image") or ""
-                        if url.startswith("http"):
-                            urls.append(url)
-            return urls
-
-        try:
-            main_response = await self._search(
-                query=query,
-                search_depth="basic",
-                max_results=max_results,
-                include_answer=False,
-                include_raw_content=False,
-                include_images=True,
-                language="zh",
-            )
-            for r in main_response.get("results", []):
-                all_results.append(self._format_result(r, self._classify_source(r.get("url", "")), "tavily"))
-            all_images.extend(_collect_images(main_response))
-        except Exception:
-            pass
-
-        all_results = self._filter_relevant(all_results, query)
-        return all_results, all_images[:20]
+        return self._mock_search(query), []
 
     def _filter_relevant(self, results: list[dict], query: str) -> list[dict]:
         """Strict filtering: only keep results directly about the specific project query.
