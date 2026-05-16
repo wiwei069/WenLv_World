@@ -135,8 +135,8 @@ async def _run_search(
 
             await db.commit()
 
-            # Background social scraping (non-blocking)
-            asyncio.create_task(_run_social_scraping(project.id, project.chinese_name, query))
+            # Social scraping disabled (OOM risk on Render free tier)
+            # asyncio.create_task(_run_social_scraping(project.id, project.chinese_name, query))
 
             _task_store[task_id] = {"status": "complete", "projects_found": 1}
             stmt = select(SearchTask).where(SearchTask.id == task_id)
