@@ -25,6 +25,8 @@ def _find_font() -> str:
     candidates = [
         "C:/Windows/Fonts/simhei.ttf",
         "C:/Windows/Fonts/msyh.ttc",
+        "data/fonts/NotoSansSC-Regular.otf",
+        "./data/fonts/NotoSansSC-Regular.otf",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",

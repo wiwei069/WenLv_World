@@ -3,7 +3,7 @@ services:
     name: wenlv-backend
     runtime: python
     repo: https://github.com/wiwei069/WenLv_World
-    buildCommand: apt-get update -qq && apt-get install -y -qq fonts-noto-cjk && cd backend && pip install -r requirements.txt
+    buildCommand: cd backend && mkdir -p data/fonts && curl -sL -o data/fonts/NotoSansSC-Regular.otf "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansSC-Regular.otf" && pip install -r requirements.txt
     startCommand: cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
@@ -14,3 +14,5 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: PDF_FONT_PATH
+        value: data/fonts/NotoSansSC-Regular.otf
