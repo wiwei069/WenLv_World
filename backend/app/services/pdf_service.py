@@ -25,8 +25,8 @@ def _find_font() -> str:
     candidates = [
         "C:/Windows/Fonts/simhei.ttf",
         "C:/Windows/Fonts/msyh.ttc",
-        "data/fonts/NotoSansSC-Regular.otf",
-        "./data/fonts/NotoSansSC-Regular.otf",
+        "data/fonts/NotoSansSC-Regular.ttf",
+        "./data/fonts/NotoSansSC-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
@@ -40,15 +40,15 @@ def _find_font() -> str:
         if os.path.exists(p):
             return p
 
-    # 3. Download Noto Sans SC (regular weight) from Google Fonts
+    # 3. Download Noto Sans SC (regular weight) from Google Fonts CDN
     font_dir = Path(os.environ.get("DATA_DIR", "./data")) / "fonts"
     font_dir.mkdir(parents=True, exist_ok=True)
-    local_path = str(font_dir / "NotoSansSC-Regular.otf")
+    local_path = str(font_dir / "NotoSansSC-Regular.ttf")
 
     if not os.path.exists(local_path):
         url = (
-            "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/"
-            "SimplifiedChinese/NotoSansSC-Regular.otf"
+            "https://fonts.gstatic.com/s/notosanssc/v40/"
+            "k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYw.ttf"
         )
         try:
             urllib.request.urlretrieve(url, local_path)
