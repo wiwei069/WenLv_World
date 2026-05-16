@@ -3,7 +3,7 @@ services:
     name: wenlv-backend
     runtime: python
     repo: https://github.com/wiwei069/WenLv_World
-    buildCommand: cd backend && pip install -r requirements.txt
+    buildCommand: apt-get update -qq && apt-get install -y -qq fonts-noto-cjk && cd backend && pip install -r requirements.txt
     startCommand: cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION

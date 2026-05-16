@@ -1,28 +1,65 @@
 import os
 import re
+import urllib.request
+from pathlib import Path
 from datetime import datetime
 from fpdf import FPDF
 
-_FONT_PATH = os.environ.get("PDF_FONT_PATH", "C:/Windows/Fonts/simhei.ttf")
+_FONT_PATH = os.environ.get("PDF_FONT_PATH", "")
 
 # A4 usable width with default 10mm margins
 _PAGE_W = 190
 
 
 def _find_font() -> str:
-    """Find a usable CJK font on the system."""
-    if os.path.exists(_FONT_PATH):
+    """Find a usable CJK font on the system.
+
+    Checks env var first, then common system paths, and finally downloads
+    NotoSansSC from Google Fonts if no CJK font is found.
+    """
+    # 1. Check env var override
+    if _FONT_PATH and os.path.exists(_FONT_PATH):
         return _FONT_PATH
+
+    # 2. Check common system paths (Windows / Linux / macOS)
     candidates = [
         "C:/Windows/Fonts/simhei.ttf",
         "C:/Windows/Fonts/msyh.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansSC-Regular.otf",
+        "/usr/share/fonts/opentype/noto/NotoSansSC-Regular.otf",
+        # macOS
+        "/System/Library/Fonts/PingFang.ttc",
+        "/Library/Fonts/Arial Unicode.ttf",
     ]
     for p in candidates:
         if os.path.exists(p):
             return p
-    return _FONT_PATH
+
+    # 3. Download Noto Sans SC (regular weight) from Google Fonts
+    font_dir = Path(os.environ.get("DATA_DIR", "./data")) / "fonts"
+    font_dir.mkdir(parents=True, exist_ok=True)
+    local_path = str(font_dir / "NotoSansSC-Regular.otf")
+
+    if not os.path.exists(local_path):
+        url = (
+            "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/"
+            "SimplifiedChinese/NotoSansSC-Regular.otf"
+        )
+        try:
+            urllib.request.urlretrieve(url, local_path)
+        except Exception:
+            pass  # will fall through to raise below
+
+    if os.path.exists(local_path):
+        return local_path
+
+    raise RuntimeError(
+        "No CJK font found. Set PDF_FONT_PATH env var to a .ttf/.otf/.ttc "
+        "file that supports Chinese characters, or install fonts-noto-cjk."
+    )
 
 
 def _strip_md(text: str) -> str:
