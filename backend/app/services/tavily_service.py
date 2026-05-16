@@ -1,4 +1,3 @@
-import asyncio
 import json
 import re
 from typing import Optional
@@ -83,8 +82,181 @@ class TavilyService:
         return self.client is not None and bool(settings.tavily_api_key)
 
     async def search_projects(self, query: str, max_results: int = None) -> tuple[list[dict], list[str]]:
-        """Search for cultural tourism projects."""
-        return self._mock_search(query), []
+        """Search for cultural tourism projects with multi-dimensional queries.
+        Returns (results, collected_image_urls)."""
+        if not self.is_available():
+            return self._mock_search(query), []
+
+        max_results = max_results or settings.tavily_max_results
+        all_results = []
+        all_images: list[str] = []
+
+        def _collect_images(response: dict) -> list[str]:
+            """Extract top-level images from Tavily response."""
+            imgs = response.get("images", [])
+            urls = []
+            if imgs and isinstance(imgs, list):
+                for img in imgs:
+                    if isinstance(img, str):
+                        if img.startswith("http"):
+                            urls.append(img)
+                    elif isinstance(img, dict):
+                        url = img.get("url") or img.get("image") or ""
+                        if url.startswith("http"):
+                            urls.append(url)
+            return urls
+
+        # 1. Main search - government & information domains
+        main_response = self.client.search(
+            query=query,
+            search_depth=settings.tavily_search_depth,
+            max_results=max_results,
+            include_answer=True,
+            include_raw_content=False,
+            include_images=True,
+            include_domains=GOVERNMENT_DOMAINS,
+            language="zh",
+        )
+        for r in main_response.get("results", []):
+            all_results.append(self._format_result(r, self._classify_source(r.get("url", "")), "tavily"))
+        all_images.extend(_collect_images(main_response))
+
+        # 2. Industry data search - operational metrics
+        industry_queries = [
+            f"{query} 运营数据 游客量 收入",
+            f"{query} 运营模式 合作模式",
+        ]
+        for iq in industry_queries:
+            try:
+                ir = self.client.search(
+                    query=iq,
+                    search_depth="basic",
+                    max_results=5,
+                    include_images=True,
+                    include_domains=INDUSTRY_DOMAINS,
+                    language="zh",
+                )
+                for r in ir.get("results", []):
+                    all_results.append(self._format_result(r, self._classify_source(r.get("url", "")), "tavily"))
+                all_images.extend(_collect_images(ir))
+            except Exception:
+                pass
+
+        # 3. Official data service search (文化和旅游部数据服务)
+        try:
+            gov_query = f"site:mct.gov.cn {query} 景区 数据"
+            gov_r = self.client.search(
+                query=gov_query,
+                search_depth="basic",
+                max_results=5,
+                include_images=True,
+                language="zh",
+            )
+            for r in gov_r.get("results", []):
+                all_results.append(self._format_result(r, "government", "tavily"))
+            all_images.extend(_collect_images(gov_r))
+        except Exception:
+            pass
+
+        # 4. Social platforms search
+        social_query = f"{query} 旅游 评价"
+        try:
+            social_response = self.client.search(
+                query=social_query,
+                search_depth="basic",
+                max_results=5,
+                include_images=True,
+                include_domains=SOCIAL_DOMAINS,
+                language="zh",
+            )
+            for r in social_response.get("results", []):
+                all_results.append({
+                    "url": r.get("url", ""),
+                    "title": r.get("title", ""),
+                    "content": r.get("content", ""),
+                    "source_type": "social",
+                    "platform": self._detect_social_platform(r.get("url", "")),
+                })
+            all_images.extend(_collect_images(social_response))
+        except Exception:
+            pass
+
+        # 5. Travel platform search - 门票价格、游客评价、运营数据
+        travel_queries = [
+            f"{query} 门票 价格 开放时间",
+            f"{query} 游客评价 口碑",
+            f"{query} 游玩攻略 推荐",
+        ]
+        for tq in travel_queries:
+            try:
+                tr = self.client.search(
+                    query=tq,
+                    search_depth="basic",
+                    max_results=5,
+                    include_images=True,
+                    include_domains=TRAVEL_DOMAINS,
+                    language="zh",
+                )
+                for r in tr.get("results", []):
+                    all_results.append(
+                        self._format_result(r, self._classify_source(r.get("url", "")), "tavily")
+                    )
+                all_images.extend(_collect_images(tr))
+            except Exception:
+                pass
+
+        # 6. Academic / research search
+        try:
+            academic_query = f"{query} 文旅 研究 分析 报告"
+            ar = self.client.search(
+                query=academic_query,
+                search_depth="basic",
+                max_results=3,
+                include_images=True,
+                include_domains=ACADEMIC_DOMAINS,
+                language="zh",
+            )
+            for r in ar.get("results", []):
+                all_results.append(
+                    self._format_result(r, "academic", "tavily")
+                )
+            all_images.extend(_collect_images(ar))
+        except Exception:
+            pass
+
+        # 7. Dedicated image search - find project promotional images and real photos
+        try:
+            image_queries = [
+                f"{query} 实景图 宣传照 官方",
+                f"{query} 景区照片 风景 风光",
+            ]
+            for iq in image_queries:
+                img_resp = self.client.search(
+                    query=iq,
+                    search_depth="basic",
+                    max_results=4,
+                    include_images=True,
+                    language="zh",
+                )
+                all_images.extend(_collect_images(img_resp))
+        except Exception:
+            pass
+
+        # Deduplicate images
+        seen = set()
+        deduped_images = []
+        for img in all_images:
+            if img not in seen:
+                seen.add(img)
+                deduped_images.append(img)
+
+        # Filter images for relevance to the query
+        deduped_images = self._filter_images(deduped_images, query)
+
+        # Filter results for relevance to the query
+        all_results = self._filter_relevant(all_results, query)
+
+        return all_results, deduped_images
 
     def _filter_relevant(self, results: list[dict], query: str) -> list[dict]:
         """Strict filtering: only keep results directly about the specific project query.
@@ -365,13 +537,6 @@ class TavilyService:
         if "weibo" in url:
             return "weibo"
         return "tavily"
-
-    async def _search(self, **kwargs) -> dict:
-        """Run synchronous TavilyClient.search in a thread to avoid blocking the event loop."""
-        return await asyncio.wait_for(
-            asyncio.to_thread(self.client.search, **kwargs),
-            timeout=15.0,
-        )
 
     def _mock_search(self, query: str) -> list[dict]:
         mock_data = {
